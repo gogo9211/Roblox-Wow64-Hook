@@ -25,7 +25,7 @@ std::pair<std::uintptr_t, std::uintptr_t>* __stdcall check_for_wow64_hooks_hook(
 std::uint32_t addr;
 std::uint32_t info;
 
-// if function fails roblox doesn't do anything. So what we do here is check if they are scanning .text and if so we set syscall id to another one, which basically does nothing
+// if function fails Roblox doesn't do anything. So what we do here is check if they are scanning .text and if so we set syscall id to another one, which basically does nothing
 void __declspec(naked) query_hook()
 {
     __asm
@@ -91,6 +91,7 @@ void bypass_wow64_transition()
         pop edx
     }
 
+    // hook their gate integrity check
     tramp_hook(base_addr + gate_integrity, reinterpret_cast<std::uintptr_t>(check_for_wow64_hooks_hook), 6);
 
     const auto cloned_transition = *reinterpret_cast<std::uintptr_t*>(base_addr + gate_clone);
@@ -99,17 +100,18 @@ void bypass_wow64_transition()
 
     VirtualProtect(reinterpret_cast<LPVOID>(cloned_transition), 0x4, PAGE_EXECUTE_READWRITE, &old);
 
+    // redirect the cloned gate to original gate
     *reinterpret_cast<std::uintptr_t**>(cloned_transition + 0x2) = &wow64_transition_address;
 
     VirtualProtect(reinterpret_cast<LPVOID>(cloned_transition), 0x4, old, &old);
 
-    original_gate = wow64_transition_address + 9;
-
+    // copy original gate jump
     original_gate = reinterpret_cast<std::uintptr_t>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
     memcpy(reinterpret_cast<void*>(original_gate), reinterpret_cast<void*>(wow64_transition_address), 9);
 
     VirtualProtect(reinterpret_cast<LPVOID>(wow64_transition_address), 0x4, PAGE_EXECUTE_READWRITE, &old);
 
+    // place jmp which goes to our stub
     const auto rel_location = (reinterpret_cast<std::uintptr_t>(gate_stub_hook) - wow64_transition_address - 5);
     *reinterpret_cast<std::uint8_t*>(wow64_transition_address) = 0xE9;
     *reinterpret_cast<std::uintptr_t*>(wow64_transition_address + 1) = rel_location;
